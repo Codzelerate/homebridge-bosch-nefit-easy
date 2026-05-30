@@ -1,7 +1,7 @@
-# @codzelerate/homebridge-bosch-nefit-easy
+# homebridge-bosch-nefit-easy
 
-[![npm version](https://img.shields.io/npm/v/@codzelerate/homebridge-bosch-nefit-easy.svg)](https://www.npmjs.com/package/@codzelerate/homebridge-bosch-nefit-easy)
-[![npm downloads](https://img.shields.io/npm/dt/@codzelerate/homebridge-bosch-nefit-easy.svg)](https://www.npmjs.com/package/@codzelerate/homebridge-bosch-nefit-easy)
+[![npm version](https://img.shields.io/npm/v/homebridge-bosch-nefit-easy.svg)](https://www.npmjs.com/package/homebridge-bosch-nefit-easy)
+[![npm downloads](https://img.shields.io/npm/dt/homebridge-bosch-nefit-easy.svg)](https://www.npmjs.com/package/homebridge-bosch-nefit-easy)
 [![Homebridge](https://img.shields.io/badge/Homebridge-v2.x-purple)](https://homebridge.io)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-brightgreen)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -42,13 +42,13 @@ A **Homebridge v2** plugin that integrates the **Bosch Nefit Easy** thermostat w
 
 1. Open the Homebridge UI in your browser
 2. Go to the **Plugins** tab
-3. Search for **@codzelerate/homebridge-bosch-nefit-easy**
+3. Search for **homebridge-bosch-nefit-easy**
 4. Click **Install**
 
 ### Via Terminal
 
 ```bash
-npm install -g @codzelerate/homebridge-bosch-nefit-easy
+npm install -g homebridge-bosch-nefit-easy
 ```
 
 ---
@@ -207,7 +207,7 @@ To enable via the Homebridge UI:
 
 1. Open the Homebridge UI → **Plugins** tab
 2. Uninstall `homebridge-nefit-easy`
-3. Install `@codzelerate/homebridge-bosch-nefit-easy`
+3. Install `homebridge-bosch-nefit-easy`
 4. Re-enter your credentials in the plugin settings (same serial number, access key, and password)
 5. Restart Homebridge
 
@@ -239,12 +239,12 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ## Built by Codzelerate
 
-This plugin is developed and maintained by [**Codzelerate**](https://www.codzelerate.com?utm_source=github&utm_medium=plugin&utm_campaign=@codzelerate/homebridge-bosch-nefit-easy) — a software development studio focused on smart home automation, IoT integrations, and Apple platform development.
+This plugin is developed and maintained by [**Codzelerate**](https://www.codzelerate.com?utm_source=github&utm_medium=plugin&utm_campaign=homebridge-bosch-nefit-easy) — a software development studio focused on smart home automation, IoT integrations, and Apple platform development.
 
-For questions, bug reports, or feature requests, please [open an issue](https://github.com/Codzelerate/@codzelerate/homebridge-bosch-nefit-easy/issues) on GitHub.
+For questions, bug reports, or feature requests, please [open an issue](https://github.com/Codzelerate/homebridge-bosch-nefit-easy/issues) on GitHub.
 
 ---
 
 ## License
 
-MIT © [Codzelerate](https://www.codzelerate.com?utm_source=github&utm_medium=plugin&utm_campaign=@codzelerate/homebridge-bosch-nefit-easy)
+MIT © [Codzelerate](https://www.codzelerate.com?utm_source=github&utm_medium=plugin&utm_campaign=homebridge-bosch-nefit-easy)
