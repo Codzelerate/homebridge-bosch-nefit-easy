@@ -241,7 +241,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 This plugin is developed and maintained by [**Codzelerate**](https://www.codzelerate.com?utm_source=github&utm_medium=plugin&utm_campaign=homebridge-bosch-nefit-easy) — a software development studio focused on smart home automation, IoT integrations, and Apple platform development.
 
-For questions, bug reports, or feature requests, please [open an issue](https://github.com/geozakk/homebridge-bosch-nefit-easy/issues) on GitHub.
+For questions, bug reports, or feature requests, please [open an issue](https://github.com/Codzelerate/homebridge-bosch-nefit-easy/issues) on GitHub.
 
 ---
 
