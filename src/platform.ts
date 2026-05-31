@@ -28,6 +28,14 @@ export class NefitEasyPlatform implements DynamicPlatformPlugin {
   }
 
   private discoverDevices(): void {
+    // Validate required credentials before attempting anything.
+    if (!this.config.serialNumber || !this.config.accessKey || !this.config.password) {
+      this.log.error(
+        'Plugin not configured — open the Homebridge UI, click Settings on this plugin, and enter your Serial Number, Access Key, and Password.',
+      );
+      return;
+    }
+
     // Use serialNumber as the UUID seed so it's stable across restarts.
     const uuid = this.api.hap.uuid.generate(
       this.config.serialNumber ?? 'nefit-easy-thermostat',

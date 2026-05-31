@@ -2,6 +2,11 @@
 
 All notable changes to `homebridge-bosch-nefit-easy` will be documented here.
 
+## [2.2.1] - 2026-05-31
+
+### Fixed
+- Plugin now validates credentials on startup — logs a clear error and does not attempt to connect if Serial Number, Access Key, or Password are missing. This satisfies the Homebridge verified plugin requirement that a plugin must not start unless configured.
+
 ## [2.2.0] - 2026-05-31
 
 ### Changed
