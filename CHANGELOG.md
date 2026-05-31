@@ -2,6 +2,13 @@
 
 All notable changes to `homebridge-bosch-nefit-easy` will be documented here.
 
+## [2.2.2] - 2026-05-31
+
+### Changed
+- README updated to reflect platform plugin architecture — manual config now shows `platforms[]` instead of `accessories[]`
+- Password field in Homebridge UI Settings is now masked
+- Documentation updated for all optional features, HomeKit capabilities, child bridge setup, and migration from v2.1.x
+
 ## [2.2.1] - 2026-05-31
 
 ### Fixed

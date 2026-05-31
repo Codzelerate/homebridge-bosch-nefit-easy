@@ -100,7 +100,15 @@
     {
       "type": "fieldset",
       "title": "Thermostat Identity",
-      "items": ["name", "serialNumber", "accessKey", "password"]
+      "items": [
+        "name",
+        "serialNumber",
+        "accessKey",
+        {
+          "key": "password",
+          "type": "password"
+        }
+      ]
     },
     {
       "type": "fieldset",
