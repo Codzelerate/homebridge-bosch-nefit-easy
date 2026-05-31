@@ -1,9 +1,9 @@
 import type {
-  AccessoryConfig,
-  AccessoryPlugin,
   API,
   CharacteristicValue,
   Logging,
+  PlatformAccessory,
+  PlatformConfig,
   Service,
 } from 'homebridge';
 
@@ -24,7 +24,7 @@ interface NefitFeatures {
   hotWaterTemperature?: boolean;
 }
 
-interface NefitConfig extends AccessoryConfig {
+interface NefitConfig extends PlatformConfig {
   serialNumber: string;
   accessKey: string;
   password: string;
@@ -58,25 +58,22 @@ interface ScalarResponse {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MIN_TEMP          = 5;
-const MAX_TEMP          = 30;
-const TEMP_STEP         = 0.5;
-const RECONNECT_DELAY   = 30_000;
+const MIN_TEMP        = 5;
+const MAX_TEMP        = 30;
+const TEMP_STEP       = 0.5;
+const RECONNECT_DELAY = 30_000;
 
 // ─── Accessory ────────────────────────────────────────────────────────────────
 
-export class NefitEasyAccessory implements AccessoryPlugin {
+export class NefitEasyAccessory {
   private readonly log: Logging;
   private readonly config: NefitConfig;
   private readonly api: API;
   private readonly feat: NefitFeatures;
   private readonly debugEnabled: boolean;
 
-  // Core service (always present)
-  private readonly informationService: Service;
+  // Services
   private readonly thermostatService: Service;
-
-  // Optional services
   private hotWaterService?: Service;
   private manualModeService?: Service;
   private holidayModeService?: Service;
@@ -91,17 +88,22 @@ export class NefitEasyAccessory implements AccessoryPlugin {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   // Cached values
-  private currentTemperature    = 20;
-  private targetTemperature     = 20;
-  private currentHeatingState   = 0;
-  private hotWaterActive        = false;
-  private manualModeActive      = false;
-  private holidayModeActive     = false;
-  private awayModeActive        = false;
-  private outdoorTemperature    = 0;
-  private hotWaterTemperature   = 0;
+  private currentTemperature  = 20;
+  private targetTemperature   = 20;
+  private currentHeatingState = 0;
+  private hotWaterActive      = false;
+  private manualModeActive    = false;
+  private holidayModeActive   = false;
+  private awayModeActive      = false;
+  private outdoorTemperature  = 0;
+  private hotWaterTemperature = 0;
 
-  constructor(log: Logging, config: AccessoryConfig, api: API) {
+  constructor(
+    log: Logging,
+    config: PlatformConfig,
+    api: API,
+    private readonly platformAccessory: PlatformAccessory,
+  ) {
     this.log          = log;
     this.config       = config as NefitConfig;
     this.api          = api;
@@ -115,14 +117,17 @@ export class NefitEasyAccessory implements AccessoryPlugin {
     this.log.info('Initializing BoschNefitEasy accessory...');
 
     // ── Accessory Information ─────────────────────────────────────────────────
-    this.informationService = new Service.AccessoryInformation()
-      .setCharacteristic(Characteristic.Manufacturer,       'Bosch')
-      .setCharacteristic(Characteristic.Model,              'Nefit Easy')
-      .setCharacteristic(Characteristic.SerialNumber,       this.config.serialNumber ?? 'Unknown')
-      .setCharacteristic(Characteristic.FirmwareRevision,   PLUGIN_VERSION);
+    const infoService = this.platformAccessory.getService(Service.AccessoryInformation)!;
+    infoService
+      .setCharacteristic(Characteristic.Manufacturer,     'Bosch')
+      .setCharacteristic(Characteristic.Model,            'Nefit Easy')
+      .setCharacteristic(Characteristic.SerialNumber,     this.config.serialNumber ?? 'Unknown')
+      .setCharacteristic(Characteristic.FirmwareRevision, PLUGIN_VERSION);
 
     // ── Thermostat (always on) ────────────────────────────────────────────────
-    this.thermostatService = new Service.Thermostat(this.config.name);
+    this.thermostatService =
+      this.platformAccessory.getService(Service.Thermostat) ||
+      this.platformAccessory.addService(Service.Thermostat, this.config.name ?? 'Thermostat');
 
     this.thermostatService
       .getCharacteristic(Characteristic.CurrentTemperature)
@@ -159,7 +164,9 @@ export class NefitEasyAccessory implements AccessoryPlugin {
 
     // ── Hot Water Switch ──────────────────────────────────────────────────────
     if (this.feat.hotWater) {
-      this.hotWaterService = new Service.Switch('Hot Water', 'hot-water');
+      this.hotWaterService =
+        this.platformAccessory.getService(Service.Switch) ||
+        this.platformAccessory.addService(Service.Switch, 'Hot Water', 'hot-water');
       this.hotWaterService
         .getCharacteristic(Characteristic.On)
         .onGet(() => {
@@ -172,7 +179,9 @@ export class NefitEasyAccessory implements AccessoryPlugin {
 
     // ── Manual Mode Switch ────────────────────────────────────────────────────
     if (this.feat.manualMode) {
-      this.manualModeService = new Service.Switch('Manual Mode', 'manual-mode');
+      this.manualModeService =
+        this.platformAccessory.getServiceById(Service.Switch, 'manual-mode') ||
+        this.platformAccessory.addService(Service.Switch, 'Manual Mode', 'manual-mode');
       this.manualModeService
         .getCharacteristic(Characteristic.On)
         .onGet(() => {
@@ -185,7 +194,9 @@ export class NefitEasyAccessory implements AccessoryPlugin {
 
     // ── Holiday Mode Switch (read-only) ───────────────────────────────────────
     if (this.feat.holidayMode) {
-      this.holidayModeService = new Service.Switch('Holiday Mode', 'holiday-mode');
+      this.holidayModeService =
+        this.platformAccessory.getServiceById(Service.Switch, 'holiday-mode') ||
+        this.platformAccessory.addService(Service.Switch, 'Holiday Mode', 'holiday-mode');
       this.holidayModeService
         .getCharacteristic(Characteristic.On)
         .onGet(() => {
@@ -194,7 +205,6 @@ export class NefitEasyAccessory implements AccessoryPlugin {
         })
         .onSet((_value) => {
           this.log.warn('Holiday Mode cannot be toggled from HomeKit — set it on the thermostat directly.');
-          // Restore the current value so the switch snaps back
           setTimeout(() => {
             this.holidayModeService!
               .getCharacteristic(Characteristic.On)
@@ -204,13 +214,14 @@ export class NefitEasyAccessory implements AccessoryPlugin {
       this.log.info('Feature enabled: Holiday Mode indicator (read-only)');
     }
 
-    // ── Away Mode Occupancy Sensor (read-only) ────────────────────────────────
+    // ── Away Mode Occupancy Sensor ────────────────────────────────────────────
     if (this.feat.awayMode) {
-      this.awayModeService = new Service.OccupancySensor('Home / Away', 'away-mode');
+      this.awayModeService =
+        this.platformAccessory.getService(Service.OccupancySensor) ||
+        this.platformAccessory.addService(Service.OccupancySensor, 'Home / Away', 'away-mode');
       this.awayModeService
         .getCharacteristic(Characteristic.OccupancyDetected)
         .onGet(() => {
-          // OccupancyDetected=1 means home, 0 means away
           const occupied = !this.awayModeActive;
           this.dbg(`GET OccupancyDetected => ${occupied} (awayMode=${this.awayModeActive})`);
           return occupied
@@ -222,7 +233,9 @@ export class NefitEasyAccessory implements AccessoryPlugin {
 
     // ── Outdoor Temperature Sensor ────────────────────────────────────────────
     if (this.feat.outdoorTemperature) {
-      this.outdoorTempService = new Service.TemperatureSensor('Outdoor Temperature', 'outdoor-temp');
+      this.outdoorTempService =
+        this.platformAccessory.getServiceById(Service.TemperatureSensor, 'outdoor-temp') ||
+        this.platformAccessory.addService(Service.TemperatureSensor, 'Outdoor Temperature', 'outdoor-temp');
       this.outdoorTempService
         .getCharacteristic(Characteristic.CurrentTemperature)
         .setProps({ minValue: -40, maxValue: 60 })
@@ -235,7 +248,9 @@ export class NefitEasyAccessory implements AccessoryPlugin {
 
     // ── Hot Water Temperature Sensor ──────────────────────────────────────────
     if (this.feat.hotWaterTemperature) {
-      this.hotWaterTempService = new Service.TemperatureSensor('Hot Water Temperature', 'hw-temp');
+      this.hotWaterTempService =
+        this.platformAccessory.getServiceById(Service.TemperatureSensor, 'hw-temp') ||
+        this.platformAccessory.addService(Service.TemperatureSensor, 'Hot Water Temperature', 'hw-temp');
       this.hotWaterTempService
         .getCharacteristic(Characteristic.CurrentTemperature)
         .setProps({ minValue: 0, maxValue: 100 })
@@ -247,17 +262,6 @@ export class NefitEasyAccessory implements AccessoryPlugin {
     }
 
     this.connect();
-  }
-
-  getServices(): Service[] {
-    const services: Service[] = [this.informationService, this.thermostatService];
-    if (this.hotWaterService)      { services.push(this.hotWaterService); }
-    if (this.manualModeService)    { services.push(this.manualModeService); }
-    if (this.holidayModeService)   { services.push(this.holidayModeService); }
-    if (this.awayModeService)      { services.push(this.awayModeService); }
-    if (this.outdoorTempService)   { services.push(this.outdoorTempService); }
-    if (this.hotWaterTempService)  { services.push(this.hotWaterTempService); }
-    return services;
   }
 
   // ─── Connection ─────────────────────────────────────────────────────────────
@@ -447,7 +451,7 @@ export class NefitEasyAccessory implements AccessoryPlugin {
       burnerOn    !== (this.currentHeatingState === Characteristic.CurrentHeatingCoolingState.HEAT);
 
     if (statusChanged) {
-      this.log.info(`Status changed — current: ${inHouseTemp}°C, setpoint: ${setpoint}°C, burner: ${burnerOn ? 'on' : 'off'}`);
+      this.log.info(`Status — current: ${inHouseTemp}°C, setpoint: ${setpoint}°C, burner: ${burnerOn ? 'on' : 'off'}`);
     }
 
     // ── Hot Water ─────────────────────────────────────────────────────────────

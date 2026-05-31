@@ -2,6 +2,18 @@
 
 All notable changes to `homebridge-bosch-nefit-easy` will be documented here.
 
+## [2.2.0] - 2026-05-31
+
+### Changed
+- Converted from Accessory plugin to **Platform plugin** (`DynamicPlatformPlugin`) — this is the correct Homebridge v2 architecture
+- Plugin now appears in `platforms[]` in config.json instead of `accessories[]`
+- Homebridge UI now shows the child bridge setup popup on install, and the Settings button works correctly
+- Added `src/settings.ts` with `PLATFORM_NAME` and `PLUGIN_NAME` constants
+- Added `src/platform.ts` — `NefitEasyPlatform` class handles accessory registration and caching
+
+### Migration
+Existing users must remove the old `BoschNefitEasy` entry from `accessories[]` in config.json and re-configure via the Homebridge UI. The thermostat will need to be re-paired in the Home app once.
+
 ## [2.1.4] - 2026-05-31
 
 ### Changed

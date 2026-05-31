@@ -13,15 +13,14 @@ const TEMP_STEP = 0.5;
 const RECONNECT_DELAY = 30_000;
 // ─── Accessory ────────────────────────────────────────────────────────────────
 class NefitEasyAccessory {
+    platformAccessory;
     log;
     config;
     api;
     feat;
     debugEnabled;
-    // Core service (always present)
-    informationService;
+    // Services
     thermostatService;
-    // Optional services
     hotWaterService;
     manualModeService;
     holidayModeService;
@@ -43,7 +42,8 @@ class NefitEasyAccessory {
     awayModeActive = false;
     outdoorTemperature = 0;
     hotWaterTemperature = 0;
-    constructor(log, config, api) {
+    constructor(log, config, api, platformAccessory) {
+        this.platformAccessory = platformAccessory;
         this.log = log;
         this.config = config;
         this.api = api;
@@ -53,13 +53,16 @@ class NefitEasyAccessory {
         const { Service, Characteristic } = this.api.hap;
         this.log.info('Initializing BoschNefitEasy accessory...');
         // ── Accessory Information ─────────────────────────────────────────────────
-        this.informationService = new Service.AccessoryInformation()
+        const infoService = this.platformAccessory.getService(Service.AccessoryInformation);
+        infoService
             .setCharacteristic(Characteristic.Manufacturer, 'Bosch')
             .setCharacteristic(Characteristic.Model, 'Nefit Easy')
             .setCharacteristic(Characteristic.SerialNumber, this.config.serialNumber ?? 'Unknown')
             .setCharacteristic(Characteristic.FirmwareRevision, PLUGIN_VERSION);
         // ── Thermostat (always on) ────────────────────────────────────────────────
-        this.thermostatService = new Service.Thermostat(this.config.name);
+        this.thermostatService =
+            this.platformAccessory.getService(Service.Thermostat) ||
+                this.platformAccessory.addService(Service.Thermostat, this.config.name ?? 'Thermostat');
         this.thermostatService
             .getCharacteristic(Characteristic.CurrentTemperature)
             .onGet(() => {
@@ -90,7 +93,9 @@ class NefitEasyAccessory {
             .onSet(() => { });
         // ── Hot Water Switch ──────────────────────────────────────────────────────
         if (this.feat.hotWater) {
-            this.hotWaterService = new Service.Switch('Hot Water', 'hot-water');
+            this.hotWaterService =
+                this.platformAccessory.getService(Service.Switch) ||
+                    this.platformAccessory.addService(Service.Switch, 'Hot Water', 'hot-water');
             this.hotWaterService
                 .getCharacteristic(Characteristic.On)
                 .onGet(() => {
@@ -102,7 +107,9 @@ class NefitEasyAccessory {
         }
         // ── Manual Mode Switch ────────────────────────────────────────────────────
         if (this.feat.manualMode) {
-            this.manualModeService = new Service.Switch('Manual Mode', 'manual-mode');
+            this.manualModeService =
+                this.platformAccessory.getServiceById(Service.Switch, 'manual-mode') ||
+                    this.platformAccessory.addService(Service.Switch, 'Manual Mode', 'manual-mode');
             this.manualModeService
                 .getCharacteristic(Characteristic.On)
                 .onGet(() => {
@@ -114,7 +121,9 @@ class NefitEasyAccessory {
         }
         // ── Holiday Mode Switch (read-only) ───────────────────────────────────────
         if (this.feat.holidayMode) {
-            this.holidayModeService = new Service.Switch('Holiday Mode', 'holiday-mode');
+            this.holidayModeService =
+                this.platformAccessory.getServiceById(Service.Switch, 'holiday-mode') ||
+                    this.platformAccessory.addService(Service.Switch, 'Holiday Mode', 'holiday-mode');
             this.holidayModeService
                 .getCharacteristic(Characteristic.On)
                 .onGet(() => {
@@ -123,7 +132,6 @@ class NefitEasyAccessory {
             })
                 .onSet((_value) => {
                 this.log.warn('Holiday Mode cannot be toggled from HomeKit — set it on the thermostat directly.');
-                // Restore the current value so the switch snaps back
                 setTimeout(() => {
                     this.holidayModeService
                         .getCharacteristic(Characteristic.On)
@@ -132,13 +140,14 @@ class NefitEasyAccessory {
             });
             this.log.info('Feature enabled: Holiday Mode indicator (read-only)');
         }
-        // ── Away Mode Occupancy Sensor (read-only) ────────────────────────────────
+        // ── Away Mode Occupancy Sensor ────────────────────────────────────────────
         if (this.feat.awayMode) {
-            this.awayModeService = new Service.OccupancySensor('Home / Away', 'away-mode');
+            this.awayModeService =
+                this.platformAccessory.getService(Service.OccupancySensor) ||
+                    this.platformAccessory.addService(Service.OccupancySensor, 'Home / Away', 'away-mode');
             this.awayModeService
                 .getCharacteristic(Characteristic.OccupancyDetected)
                 .onGet(() => {
-                // OccupancyDetected=1 means home, 0 means away
                 const occupied = !this.awayModeActive;
                 this.dbg(`GET OccupancyDetected => ${occupied} (awayMode=${this.awayModeActive})`);
                 return occupied
@@ -149,7 +158,9 @@ class NefitEasyAccessory {
         }
         // ── Outdoor Temperature Sensor ────────────────────────────────────────────
         if (this.feat.outdoorTemperature) {
-            this.outdoorTempService = new Service.TemperatureSensor('Outdoor Temperature', 'outdoor-temp');
+            this.outdoorTempService =
+                this.platformAccessory.getServiceById(Service.TemperatureSensor, 'outdoor-temp') ||
+                    this.platformAccessory.addService(Service.TemperatureSensor, 'Outdoor Temperature', 'outdoor-temp');
             this.outdoorTempService
                 .getCharacteristic(Characteristic.CurrentTemperature)
                 .setProps({ minValue: -40, maxValue: 60 })
@@ -161,7 +172,9 @@ class NefitEasyAccessory {
         }
         // ── Hot Water Temperature Sensor ──────────────────────────────────────────
         if (this.feat.hotWaterTemperature) {
-            this.hotWaterTempService = new Service.TemperatureSensor('Hot Water Temperature', 'hw-temp');
+            this.hotWaterTempService =
+                this.platformAccessory.getServiceById(Service.TemperatureSensor, 'hw-temp') ||
+                    this.platformAccessory.addService(Service.TemperatureSensor, 'Hot Water Temperature', 'hw-temp');
             this.hotWaterTempService
                 .getCharacteristic(Characteristic.CurrentTemperature)
                 .setProps({ minValue: 0, maxValue: 100 })
@@ -172,28 +185,6 @@ class NefitEasyAccessory {
             this.log.info('Feature enabled: Hot Water Temperature sensor');
         }
         this.connect();
-    }
-    getServices() {
-        const services = [this.informationService, this.thermostatService];
-        if (this.hotWaterService) {
-            services.push(this.hotWaterService);
-        }
-        if (this.manualModeService) {
-            services.push(this.manualModeService);
-        }
-        if (this.holidayModeService) {
-            services.push(this.holidayModeService);
-        }
-        if (this.awayModeService) {
-            services.push(this.awayModeService);
-        }
-        if (this.outdoorTempService) {
-            services.push(this.outdoorTempService);
-        }
-        if (this.hotWaterTempService) {
-            services.push(this.hotWaterTempService);
-        }
-        return services;
     }
     // ─── Connection ─────────────────────────────────────────────────────────────
     createClient() {
@@ -367,7 +358,7 @@ class NefitEasyAccessory {
             setpoint !== this.targetTemperature ||
             burnerOn !== (this.currentHeatingState === Characteristic.CurrentHeatingCoolingState.HEAT);
         if (statusChanged) {
-            this.log.info(`Status changed — current: ${inHouseTemp}°C, setpoint: ${setpoint}°C, burner: ${burnerOn ? 'on' : 'off'}`);
+            this.log.info(`Status — current: ${inHouseTemp}°C, setpoint: ${setpoint}°C, burner: ${burnerOn ? 'on' : 'off'}`);
         }
         // ── Hot Water ─────────────────────────────────────────────────────────────
         if (this.feat.hotWater && this.hotWaterService) {

@@ -1,11 +1,11 @@
-import type { AccessoryConfig, AccessoryPlugin, API, Logging, Service } from 'homebridge';
-export declare class NefitEasyAccessory implements AccessoryPlugin {
+import type { API, Logging, PlatformAccessory, PlatformConfig } from 'homebridge';
+export declare class NefitEasyAccessory {
+    private readonly platformAccessory;
     private readonly log;
     private readonly config;
     private readonly api;
     private readonly feat;
     private readonly debugEnabled;
-    private readonly informationService;
     private readonly thermostatService;
     private hotWaterService?;
     private manualModeService?;
@@ -26,8 +26,7 @@ export declare class NefitEasyAccessory implements AccessoryPlugin {
     private awayModeActive;
     private outdoorTemperature;
     private hotWaterTemperature;
-    constructor(log: Logging, config: AccessoryConfig, api: API);
-    getServices(): Service[];
+    constructor(log: Logging, config: PlatformConfig, api: API, platformAccessory: PlatformAccessory);
     private createClient;
     private connect;
     private scheduleReconnect;
