@@ -2,6 +2,11 @@
 
 All notable changes to `homebridge-bosch-nefit-easy` will be documented here.
 
+## [2.1.4] - 2026-05-31
+
+### Changed
+- Published as unscoped `homebridge-bosch-nefit-easy` — discoverable directly in the Homebridge UI plugin search
+
 ## [2.1.3] - 2026-05-30
 
 ### Changed

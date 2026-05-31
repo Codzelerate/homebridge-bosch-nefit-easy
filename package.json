@@ -1,6 +1,6 @@
 {
   "name": "homebridge-bosch-nefit-easy",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "Homebridge plugin for the Bosch Nefit Easy thermostat using bosch-xmpp. Node.js 22+ compatible.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
