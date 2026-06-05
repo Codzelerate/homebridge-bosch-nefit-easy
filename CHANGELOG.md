@@ -2,6 +2,11 @@
 
 All notable changes to `homebridge-bosch-nefit-easy` will be documented here.
 
+## [2.2.3] - 2026-06-05
+
+### Fixed
+- Replaced `prepare` script with `prepublishOnly` — ensures no build scripts run on user install, satisfying the Homebridge verified plugin requirement
+
 ## [2.2.2] - 2026-05-31
 
 ### Changed
