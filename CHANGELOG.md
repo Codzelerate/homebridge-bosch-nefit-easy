@@ -2,6 +2,23 @@
 
 All notable changes to `homebridge-bosch-nefit-easy` will be documented here.
 
+## [2.3.0] - 2026-06-14
+
+### Fixed
+- **Status log line now works.** The "Status — current… setpoint… burner…" line compared the new readings against values that had *already* been overwritten, so the comparison was always false and the line never logged. Change detection now captures the previous values first, restoring the on-change logging introduced in v2.0.2.
+- **Connection leak on reconnect.** The XMPP client is now closed via `end()` before a new one is created on every reconnect — previously the old client (and its open socket) was simply discarded, leaking a connection on each network hiccup.
+- **Clean shutdown.** The plugin now stops its poll timer and closes the XMPP connection when Homebridge shuts down or reloads, instead of leaving a timer and socket running.
+- **Stale accessories removed.** Cached accessories that no longer match the configured device (for example after the serial number changes) are now unregistered instead of lingering as ghost tiles in HomeKit.
+
+### Changed
+- Optional Outdoor Temperature and Hot Water Temperature sensors are now polled concurrently rather than one after the other, shaving a round-trip off each poll cycle.
+- Backend response parsing was extracted into a small dependency-free module, and the `bosch-xmpp` client is now accessed through a typed interface — removing the last implicit `any` from the codebase.
+
+### Internal
+- Added ESLint (flat config) with a `lint` script; added unit tests for the response parsing using the built-in Node test runner.
+- CI now runs lint and tests in addition to the build on Node 22 and 24; `prepublishOnly` now runs lint, build, and tests before publishing.
+- `dist/` is no longer committed to the repository — it is built fresh on publish. Removed a stray packaged tarball that had been committed by mistake.
+
 ## [2.2.3] - 2026-06-05
 
 ### Fixed
