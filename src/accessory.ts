@@ -6,6 +6,12 @@ import type {
   PlatformConfig,
   Service,
 } from 'homebridge';
+import {
+  parseScalarTemperature,
+  parseUiStatus,
+  type ScalarResponse,
+  type UiStatus,
+} from './status';
 
 // bosch-xmpp exports named factory functions, not a createClient helper.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -33,27 +39,15 @@ interface NefitConfig extends PlatformConfig {
   features?: NefitFeatures;
 }
 
-// ─── API response shapes ──────────────────────────────────────────────────────
+// ─── Backend client ───────────────────────────────────────────────────────────
 
-interface UiStatusValue {
-  IHT: string;   // in-house temperature
-  TSP: string;   // temperature setpoint
-  BAI: string;   // burner active indicator
-  DHW: string;   // domestic hot water active
-  UMD: string;   // user mode: "manual" | "clock"
-  HMD: string;   // holiday mode: "on" | "off"
-  DAS: string;   // domestic away status: "on" | "off"
-  [key: string]: unknown;
-}
-
-interface UiStatus {
-  id: string;
-  type: string;
-  value: UiStatusValue;
-}
-
-interface ScalarResponse {
-  value: number | string;
+// Minimal structural type for the bosch-xmpp client, which ships without types.
+interface NefitClient {
+  connect(): Promise<unknown>;
+  end(): Promise<unknown>;
+  get(uri: string): Promise<unknown>;
+  put(uri: string, data: unknown): Promise<unknown>;
+  LINE_SEPARATOR: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -82,9 +76,10 @@ export class NefitEasyAccessory {
   private hotWaterTempService?: Service;
 
   // Connection state
-  private client: ReturnType<typeof NefitEasyClient> | null = null;
+  private client: NefitClient | null = null;
   private connected = false;
   private reconnecting = false;
+  private disposed = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   // Cached values
@@ -266,13 +261,13 @@ export class NefitEasyAccessory {
 
   // ─── Connection ─────────────────────────────────────────────────────────────
 
-  private createClient() {
+  private createClient(): NefitClient {
     this.dbg('Creating NefitEasyClient instance via factory function');
     const c = NefitEasyClient({
       serialNumber: this.config.serialNumber,
       accessKey:    this.config.accessKey,
       password:     this.config.password,
-    });
+    }) as NefitClient;
     // bosch-xmpp joins PUT body lines with this.LINE_SEPARATOR (defaults to '\n').
     // NefitEasyClient.buildMessage encodes \r as &#13;\n in the XMPP XML stanza,
     // which the Bosch backend decodes back to \r\n — proper HTTP/1.1 line endings.
@@ -281,9 +276,25 @@ export class NefitEasyAccessory {
     return c;
   }
 
+  // Close and discard the current client so its XMPP socket is not leaked when
+  // we reconnect. connect() always creates a fresh client, so the old one is
+  // never reused after this point.
+  private async teardownClient(): Promise<void> {
+    const c = this.client;
+    this.client = null;
+    this.connected = false;
+    if (c) {
+      try {
+        await c.end();
+      } catch (err) {
+        this.dbg(`Error while closing client: ${(err as Error).message}`);
+      }
+    }
+  }
+
   private async connect(): Promise<void> {
-    if (this.reconnecting) {
-      this.dbg('connect() called while already reconnecting — skipping');
+    if (this.reconnecting || this.disposed) {
+      this.dbg('connect() skipped — already reconnecting or disposed');
       return;
     }
     try {
@@ -299,16 +310,15 @@ export class NefitEasyAccessory {
       this.startPolling();
     } catch (err) {
       const msg = (err as Error).message ?? String(err);
-      this.log.error(`Connection failed: ${msg}. Retrying in 30 s…`);
+      this.log.error(`Connection failed: ${msg}. Retrying in ${RECONNECT_DELAY / 1000} s…`);
       this.dbg(`Full error: ${(err as Error).stack ?? msg}`);
-      this.connected = false;
-      this.client = null;
+      await this.teardownClient();
       this.scheduleReconnect();
     }
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnecting) { return; }
+    if (this.reconnecting || this.disposed) { return; }
     this.reconnecting = true;
     this.stopPolling();
     this.dbg(`Scheduling reconnect in ${RECONNECT_DELAY / 1000} s…`);
@@ -316,6 +326,16 @@ export class NefitEasyAccessory {
       this.reconnecting = false;
       this.connect();
     }, RECONNECT_DELAY);
+  }
+
+  // Called by the platform on Homebridge shutdown — stop polling and close the
+  // backend connection cleanly so no timers or sockets are left running.
+  public dispose(): void {
+    if (this.disposed) { return; }
+    this.disposed = true;
+    this.dbg('Disposing accessory — stopping polling and closing connection');
+    this.stopPolling();
+    void this.teardownClient();
   }
 
   private startPolling(): void {
@@ -341,22 +361,25 @@ export class NefitEasyAccessory {
     }
     try {
       this.dbg('Polling /ecus/rrc/uiStatus…');
-      const status: UiStatus = await this.client.get('/ecus/rrc/uiStatus');
+      const status = await this.client.get('/ecus/rrc/uiStatus') as UiStatus;
       this.dbg(`Raw uiStatus: ${JSON.stringify(status)}`);
       this.applyUiStatus(status);
 
+      // Optional sensors are independent; poll them concurrently. Each call
+      // swallows its own errors so a missing sensor never trips a reconnect.
+      const extras: Promise<void>[] = [];
       if (this.feat.outdoorTemperature) {
-        await this.pollOutdoorTemperature();
+        extras.push(this.pollOutdoorTemperature());
       }
       if (this.feat.hotWaterTemperature) {
-        await this.pollHotWaterTemperature();
+        extras.push(this.pollHotWaterTemperature());
       }
+      await Promise.all(extras);
     } catch (err) {
       const msg = (err as Error).message ?? String(err);
       this.log.warn(`Poll failed: ${msg}. Will retry after reconnect.`);
       this.dbg(`Poll error: ${(err as Error).stack ?? msg}`);
-      this.connected = false;
-      this.client = null;
+      await this.teardownClient();
       this.scheduleReconnect();
     }
   }
@@ -364,9 +387,9 @@ export class NefitEasyAccessory {
   private async pollOutdoorTemperature(): Promise<void> {
     try {
       this.dbg('Polling /system/sensors/temperatures/outdoor_t1…');
-      const res: ScalarResponse = await this.client!.get('/system/sensors/temperatures/outdoor_t1');
-      const temp = Number(res.value);
-      if (!Number.isNaN(temp)) {
+      const res = await this.client!.get('/system/sensors/temperatures/outdoor_t1') as ScalarResponse;
+      const temp = parseScalarTemperature(res);
+      if (temp !== null) {
         this.outdoorTemperature = temp;
         this.outdoorTempService!
           .getCharacteristic(this.api.hap.Characteristic.CurrentTemperature)
@@ -381,9 +404,9 @@ export class NefitEasyAccessory {
   private async pollHotWaterTemperature(): Promise<void> {
     try {
       this.dbg('Polling /dhwCircuits/dhw1/actualTemp…');
-      const res: ScalarResponse = await this.client!.get('/dhwCircuits/dhw1/actualTemp');
-      const temp = Number(res.value);
-      if (!Number.isNaN(temp)) {
+      const res = await this.client!.get('/dhwCircuits/dhw1/actualTemp') as ScalarResponse;
+      const temp = parseScalarTemperature(res);
+      if (temp !== null) {
         this.hotWaterTemperature = temp;
         this.hotWaterTempService!
           .getCharacteristic(this.api.hap.Characteristic.CurrentTemperature)
@@ -399,35 +422,42 @@ export class NefitEasyAccessory {
 
   private applyUiStatus(status: UiStatus): void {
     const { Characteristic } = this.api.hap;
-    const v = status.value;
+    const s = parseUiStatus(status.value);
+
+    this.dbg(`Parsed — IHT:${s.currentTemperature} TSP:${s.targetTemperature} BAI:${status.value.BAI} ` +
+      `burner:${s.burnerOn} DHW:${s.hotWaterOn} manual:${s.manualMode} holiday:${s.holidayMode} away:${s.awayMode}`);
+
+    // Capture previous values BEFORE mutating cached state, so the change
+    // detection below reflects what actually changed since the last poll.
+    const prevTemperature = this.currentTemperature;
+    const prevSetpoint    = this.targetTemperature;
+    const prevBurnerOn    = this.currentHeatingState === Characteristic.CurrentHeatingCoolingState.HEAT;
 
     // ── Core temperatures ────────────────────────────────────────────────────
-    const inHouseTemp = Number(v.IHT);
-    const setpoint    = Number(v.TSP);
-    const burnerOn    = v.BAI !== 'No' && v.BAI !== '' && v.BAI !== undefined;
-
-    this.dbg(`Parsed — IHT:${inHouseTemp} TSP:${setpoint} BAI:${v.BAI} DHW:${v.DHW} UMD:${v.UMD} HMD:${v.HMD} DAS:${v.DAS}`);
-
-    if (!Number.isNaN(inHouseTemp)) {
-      this.currentTemperature = inHouseTemp;
-      this.thermostatService
-        .getCharacteristic(Characteristic.CurrentTemperature)
-        .updateValue(inHouseTemp);
+    if (s.currentTemperature !== null) {
+      if (s.currentTemperature !== this.currentTemperature) {
+        this.currentTemperature = s.currentTemperature;
+        this.thermostatService
+          .getCharacteristic(Characteristic.CurrentTemperature)
+          .updateValue(s.currentTemperature);
+      }
     } else {
-      this.log.warn(`Unexpected IHT value: ${v.IHT}`);
+      this.log.warn(`Unexpected IHT value: ${status.value.IHT}`);
     }
 
-    if (!Number.isNaN(setpoint)) {
-      this.targetTemperature = setpoint;
-      this.thermostatService
-        .getCharacteristic(Characteristic.TargetTemperature)
-        .updateValue(setpoint);
+    if (s.targetTemperature !== null) {
+      if (s.targetTemperature !== this.targetTemperature) {
+        this.targetTemperature = s.targetTemperature;
+        this.thermostatService
+          .getCharacteristic(Characteristic.TargetTemperature)
+          .updateValue(s.targetTemperature);
+      }
     } else {
-      this.log.warn(`Unexpected TSP value: ${v.TSP}`);
+      this.log.warn(`Unexpected TSP value: ${status.value.TSP}`);
     }
 
     // CurrentHeatingCoolingState — reflects actual burner activity
-    const newCurrentState = burnerOn
+    const newCurrentState = s.burnerOn
       ? Characteristic.CurrentHeatingCoolingState.HEAT
       : Characteristic.CurrentHeatingCoolingState.OFF;
 
@@ -443,64 +473,61 @@ export class NefitEasyAccessory {
       .getCharacteristic(Characteristic.TargetHeatingCoolingState)
       .updateValue(Characteristic.TargetHeatingCoolingState.AUTO);
 
-    this.dbg(`BAI=${v.BAI}, burnerOn=${burnerOn}`);
-
+    // Log a status line only when something the user cares about actually changed.
+    const burnerOnNow = this.currentHeatingState === Characteristic.CurrentHeatingCoolingState.HEAT;
     const statusChanged =
-      inHouseTemp !== this.currentTemperature ||
-      setpoint    !== this.targetTemperature  ||
-      burnerOn    !== (this.currentHeatingState === Characteristic.CurrentHeatingCoolingState.HEAT);
+      this.currentTemperature !== prevTemperature ||
+      this.targetTemperature  !== prevSetpoint    ||
+      burnerOnNow             !== prevBurnerOn;
 
     if (statusChanged) {
-      this.log.info(`Status — current: ${inHouseTemp}°C, setpoint: ${setpoint}°C, burner: ${burnerOn ? 'on' : 'off'}`);
+      this.log.info(`Status — current: ${this.currentTemperature}°C, ` +
+        `setpoint: ${this.targetTemperature}°C, burner: ${burnerOnNow ? 'on' : 'off'}`);
     }
 
     // ── Hot Water ─────────────────────────────────────────────────────────────
     if (this.feat.hotWater && this.hotWaterService) {
-      const hwOn = v.DHW === 'on';
-      if (hwOn !== this.hotWaterActive) {
-        this.hotWaterActive = hwOn;
+      if (s.hotWaterOn !== this.hotWaterActive) {
+        this.hotWaterActive = s.hotWaterOn;
         this.hotWaterService
           .getCharacteristic(Characteristic.On)
-          .updateValue(hwOn);
-        this.dbg(`Hot water state updated: ${hwOn}`);
+          .updateValue(s.hotWaterOn);
+        this.dbg(`Hot water state updated: ${s.hotWaterOn}`);
       }
     }
 
     // ── Manual Mode ───────────────────────────────────────────────────────────
     // Always track UMD so handleSetTargetTemperature knows the current mode.
-    const manual = v.UMD === 'manual';
-    this.manualModeActive = manual;
+    this.manualModeActive = s.manualMode;
     if (this.feat.manualMode && this.manualModeService) {
       this.manualModeService
         .getCharacteristic(Characteristic.On)
-        .updateValue(manual);
-      this.dbg(`Manual mode updated: ${manual}`);
+        .updateValue(s.manualMode);
+      this.dbg(`Manual mode updated: ${s.manualMode}`);
     }
 
     // ── Holiday Mode ──────────────────────────────────────────────────────────
     if (this.feat.holidayMode && this.holidayModeService) {
-      const holiday = v.HMD === 'on';
-      if (holiday !== this.holidayModeActive) {
-        this.holidayModeActive = holiday;
+      if (s.holidayMode !== this.holidayModeActive) {
+        this.holidayModeActive = s.holidayMode;
         this.holidayModeService
           .getCharacteristic(Characteristic.On)
-          .updateValue(holiday);
-        this.dbg(`Holiday mode updated: ${holiday}`);
+          .updateValue(s.holidayMode);
+        this.dbg(`Holiday mode updated: ${s.holidayMode}`);
       }
     }
 
     // ── Away Mode ─────────────────────────────────────────────────────────────
     if (this.feat.awayMode && this.awayModeService) {
-      const away = v.DAS === 'on';
-      if (away !== this.awayModeActive) {
-        this.awayModeActive = away;
-        const occupied = away
+      if (s.awayMode !== this.awayModeActive) {
+        this.awayModeActive = s.awayMode;
+        const occupied = s.awayMode
           ? Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED
           : Characteristic.OccupancyDetected.OCCUPANCY_DETECTED;
         this.awayModeService
           .getCharacteristic(Characteristic.OccupancyDetected)
           .updateValue(occupied);
-        this.dbg(`Away mode updated: ${away} => occupancy: ${occupied}`);
+        this.dbg(`Away mode updated: ${s.awayMode} => occupancy: ${occupied}`);
       }
     }
   }

@@ -10,6 +10,7 @@ import { NefitEasyAccessory } from './accessory';
 
 export class NefitEasyPlatform implements DynamicPlatformPlugin {
   private readonly cachedAccessories: PlatformAccessory[] = [];
+  private accessory?: NefitEasyAccessory;
 
   constructor(
     public readonly log: Logging,
@@ -18,6 +19,10 @@ export class NefitEasyPlatform implements DynamicPlatformPlugin {
   ) {
     this.api.on('didFinishLaunching', () => {
       this.discoverDevices();
+    });
+    // Clean up timers and the XMPP connection when Homebridge stops or reloads.
+    this.api.on('shutdown', () => {
+      this.accessory?.dispose();
     });
   }
 
@@ -43,16 +48,24 @@ export class NefitEasyPlatform implements DynamicPlatformPlugin {
 
     const existing = this.cachedAccessories.find(a => a.UUID === uuid);
 
+    // Drop any cached accessories that no longer match the configured device
+    // (e.g. after the serial number changed) so they don't linger as ghost tiles.
+    const stale = this.cachedAccessories.filter(a => a.UUID !== uuid);
+    if (stale.length > 0) {
+      this.log.info(`Removing ${stale.length} stale cached accessory(ies).`);
+      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, stale);
+    }
+
     if (existing) {
       this.log.info('Restoring existing accessory:', existing.displayName);
-      new NefitEasyAccessory(this.log, this.config, this.api, existing);
+      this.accessory = new NefitEasyAccessory(this.log, this.config, this.api, existing);
     } else {
       this.log.info('Registering new accessory:', this.config.name ?? 'Thermostat');
       const accessory = new this.api.platformAccessory(
         this.config.name ?? 'Thermostat',
         uuid,
       );
-      new NefitEasyAccessory(this.log, this.config, this.api, accessory);
+      this.accessory = new NefitEasyAccessory(this.log, this.config, this.api, accessory);
       this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
     }
   }
