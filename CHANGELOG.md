@@ -2,6 +2,11 @@
 
 All notable changes to `homebridge-bosch-nefit-easy` will be documented here.
 
+## [2.4.2] - 2026-06-14
+
+### Fixed
+- **Status log no longer floods.** The `Status — current… setpoint… burner…` info line previously logged on every poll because the current room temperature drifts a fraction of a degree each time. It now logs only when the **setpoint or burner state** changes — the events you actually act on. Current temperature still updates HomeKit every poll and remains visible in the debug log.
+
 ## [2.4.1] - 2026-06-14
 
 ### Fixed
