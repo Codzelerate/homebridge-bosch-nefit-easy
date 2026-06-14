@@ -76,7 +76,7 @@ The **Password** is the one you chose when you first set up the Nefit Easy app d
 
 ### Using the Homebridge UI
 
-After installation, click **Settings** on the plugin to open the custom configuration page. Enter your credentials, then click **Test Connection** to validate them and preview live thermostat readings (current temperature, setpoint, burner, hot water, and more) right in the settings page. Toggle any optional features, adjust the polling interval, and click **Save Settings**. Restart Homebridge to apply.
+After installation, click **Settings** on the plugin to open the custom configuration page. Enter your credentials, then click **Test Connection** to validate them and preview live thermostat readings (current temperature, setpoint, burner, hot water, and more) right in the settings page. Toggle any optional features, adjust the polling interval, and click **Save** (in the Homebridge UI footer). Restart Homebridge to apply.
 
 ### Manual JSON Configuration
 

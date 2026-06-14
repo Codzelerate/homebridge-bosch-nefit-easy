@@ -52,7 +52,6 @@
 
   body {
     position: relative;
-    min-height: 100%;
     background: var(--canvas);
     overflow-x: hidden;
   }
@@ -390,9 +389,6 @@
   .btn .spin { width: 16px; height: 16px; animation: rot 0.8s linear infinite; }
   @keyframes rot { to { transform: rotate(360deg); } }
 
-  .actions { display: flex; gap: 12px; }
-  .actions .btn { flex: 1; }
-
   .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 520px) { .row-2 { grid-template-columns: 1fr; } }
 
@@ -565,11 +561,6 @@
       <label class="switch"><input type="checkbox" id="debug" /><span class="track"></span></label>
     </div>
   </section>
-
-  <!-- ── Actions ─────────────────────────────────────────── -->
-  <div class="actions">
-    <button class="btn primary" id="save-btn"><svg><use href="#i-save"/></svg><span>Save Settings</span></button>
-  </div>
 
 </div>
 
@@ -774,24 +765,20 @@
   };
   testBtn.addEventListener('click', () => testConnection(false));
 
-  // ── Save ───────────────────────────────────────────────────────────────
-  $('save-btn').addEventListener('click', async () => {
-    if (!config.serialNumber || !config.accessKey || !config.password) {
-      homebridge.toast.warning('Serial Number, Access Key and Password are required.', 'Incomplete');
-      return;
-    }
-    try {
-      await homebridge.updatePluginConfig([config]);
-      await homebridge.savePluginConfig();
-      homebridge.toast.success('Settings saved. Restart Homebridge to apply.', 'Saved');
-    } catch (e) {
-      homebridge.toast.error(e && e.message ? e.message : 'Save failed.', 'Error');
-    }
-  });
+  // Saving is handled by the Homebridge UI's built-in Save button in the modal
+  // footer — we keep the in-memory config in sync via updatePluginConfig() so
+  // that button always persists the latest values.
 
   // Keep the in-memory config in sync from the start.
   sync();
   refit();
+
+  // Pin the iframe height to the actual content height. Without this the
+  // Homebridge UI can leave a large empty area below the page.
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => refit()).observe(document.body);
+  }
+  window.addEventListener('load', refit);
 
   // Delightful touch: if credentials already exist, pull live data automatically.
   if (config.serialNumber && config.accessKey && config.password) {
