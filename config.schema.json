@@ -2,6 +2,7 @@
   "pluginAlias": "BoschNefitEasy",
   "pluginType": "platform",
   "singular": true,
+  "customUi": true,
   "schema": {
     "type": "object",
     "required": ["serialNumber", "accessKey", "password"],
