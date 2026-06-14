@@ -429,7 +429,8 @@ export class NefitEasyAccessory {
 
     // Capture previous values BEFORE mutating cached state, so the change
     // detection below reflects what actually changed since the last poll.
-    const prevTemperature = this.currentTemperature;
+    // (Current temperature drifts constantly, so it is intentionally excluded
+    // from the info-level status line to avoid flooding the log.)
     const prevSetpoint    = this.targetTemperature;
     const prevBurnerOn    = this.currentHeatingState === Characteristic.CurrentHeatingCoolingState.HEAT;
 
@@ -473,12 +474,13 @@ export class NefitEasyAccessory {
       .getCharacteristic(Characteristic.TargetHeatingCoolingState)
       .updateValue(Characteristic.TargetHeatingCoolingState.AUTO);
 
-    // Log a status line only when something the user cares about actually changed.
+    // Log an info status line only when the setpoint or burner state changes —
+    // the events a user actually acts on. Current temperature still updates
+    // HomeKit every poll and is recorded in the debug log above.
     const burnerOnNow = this.currentHeatingState === Characteristic.CurrentHeatingCoolingState.HEAT;
     const statusChanged =
-      this.currentTemperature !== prevTemperature ||
-      this.targetTemperature  !== prevSetpoint    ||
-      burnerOnNow             !== prevBurnerOn;
+      this.targetTemperature !== prevSetpoint ||
+      burnerOnNow            !== prevBurnerOn;
 
     if (statusChanged) {
       this.log.info(`Status — current: ${this.currentTemperature}°C, ` +

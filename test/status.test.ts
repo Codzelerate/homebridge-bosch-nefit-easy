@@ -75,19 +75,21 @@ test('parseScalarTemperature handles values, strings and missing payloads', () =
   assert.equal(parseScalarTemperature(null), null);
 });
 
-// Regression guard for the status-change detection: a poll that reports the
-// same values as the previous one must be detectable as "no change", and a
-// differing value as "changed". This is the contract applyUiStatus relies on.
-test('status change detection compares parsed snapshots', () => {
-  const prev = parseUiStatus(uiStatus({ IHT: '20', TSP: '21', BAI: 'No' }));
-  const same = parseUiStatus(uiStatus({ IHT: '20', TSP: '21', BAI: 'No' }));
-  const diff = parseUiStatus(uiStatus({ IHT: '20', TSP: '21', BAI: 'CH' }));
+// Regression guard for the info-level status line: it must fire only when the
+// setpoint or burner state changes — NOT when the current temperature drifts
+// (which it does every poll, and would otherwise flood the log).
+test('status line triggers on setpoint/burner change, not temperature drift', () => {
+  const prev = parseUiStatus(uiStatus({ IHT: '20.0', TSP: '21', BAI: 'No' }));
+  const tempDrift = parseUiStatus(uiStatus({ IHT: '20.3', TSP: '21', BAI: 'No' }));
+  const setpoint = parseUiStatus(uiStatus({ IHT: '20.0', TSP: '22', BAI: 'No' }));
+  const burner = parseUiStatus(uiStatus({ IHT: '20.0', TSP: '21', BAI: 'CH' }));
 
-  const changed = (a: typeof prev, b: typeof prev) =>
-    a.currentTemperature !== b.currentTemperature ||
+  // Mirrors the trigger used in applyUiStatus.
+  const triggersLog = (a: typeof prev, b: typeof prev) =>
     a.targetTemperature !== b.targetTemperature ||
     a.burnerOn !== b.burnerOn;
 
-  assert.equal(changed(prev, same), false);
-  assert.equal(changed(prev, diff), true);
+  assert.equal(triggersLog(prev, tempDrift), false); // temperature drift is silent
+  assert.equal(triggersLog(prev, setpoint), true);   // setpoint change logs
+  assert.equal(triggersLog(prev, burner), true);     // burner change logs
 });
