@@ -2,6 +2,12 @@
 
 All notable changes to `homebridge-bosch-nefit-easy` will be documented here.
 
+## [2.4.1] - 2026-06-14
+
+### Fixed
+- **Custom UI no longer renders an oversized empty area.** The settings page now pins its height to the actual content (via a `ResizeObserver`) instead of stretching to a large default, removing the long blank region below the form.
+- **Removed the redundant in-page Save button.** Saving now relies solely on the Homebridge UI's built-in Save / Close footer; the page keeps the config in sync as you edit, so that button always persists the latest values.
+
 ## [2.4.0] - 2026-06-14
 
 ### Added
