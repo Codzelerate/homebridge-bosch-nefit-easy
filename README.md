@@ -14,6 +14,7 @@ A **Homebridge v2** plugin that integrates the **Bosch Nefit Easy** thermostat w
 
 ## Features
 
+- **Custom configuration UI** — a modern, glass-styled settings page with a **live status dashboard** and one-tap **Test Connection** that validates your credentials and shows live thermostat readings before you save
 - Real-time temperature monitoring via HomeKit
 - Set target temperature directly from the Home app or Siri
 - Persistent XMPP connection — no per-poll reconnections
@@ -75,7 +76,7 @@ The **Password** is the one you chose when you first set up the Nefit Easy app d
 
 ### Using the Homebridge UI
 
-After installation, click **Settings** on the plugin to open the configuration form. Fill in your credentials and click Save.
+After installation, click **Settings** on the plugin to open the custom configuration page. Enter your credentials, then click **Test Connection** to validate them and preview live thermostat readings (current temperature, setpoint, burner, hot water, and more) right in the settings page. Toggle any optional features, adjust the polling interval, and click **Save Settings**. Restart Homebridge to apply.
 
 ### Manual JSON Configuration
 

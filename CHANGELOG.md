@@ -2,6 +2,17 @@
 
 All notable changes to `homebridge-bosch-nefit-easy` will be documented here.
 
+## [2.4.0] - 2026-06-14
+
+### Added
+- **Custom configuration UI.** The plugin now ships a bespoke settings page in the Homebridge UI (replacing the auto-generated form), with a modern frosted-glass / gradient design that adapts to light and dark mode.
+  - **Live Status dashboard** — a one-tap **Test Connection** validates your credentials against the Bosch backend and shows live readings (current temperature, setpoint, burner, hot water, mode, presence, and optional outdoor / hot-water sensors) right inside Settings. If valid credentials are already saved, the dashboard loads them automatically when you open the page.
+  - **Reactive controls** — password reveal, a live polling-interval slider, and icon-led feature toggles that update as you change them.
+- A custom-UI backend (`homebridge-ui/server.js`) reuses the plugin's own status parser so the dashboard can never disagree with what HomeKit shows.
+
+### Changed
+- Added `@homebridge/plugin-ui-utils` as a dependency (required by the custom UI). No change to runtime thermostat behaviour.
+
 ## [2.3.0] - 2026-06-14
 
 ### Fixed

@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bosch Nefit Easy</title>
+<style>
+  :root {
+    --grad-1: #0ea5a4;          /* teal  */
+    --grad-2: #6366f1;          /* indigo */
+    --grad-3: #8b5cf6;          /* violet */
+    --canvas: #0b1020;
+    --surface: rgba(255, 255, 255, 0.06);
+    --surface-strong: rgba(255, 255, 255, 0.10);
+    --border: rgba(255, 255, 255, 0.14);
+    --text: #eef2ff;
+    --text-dim: rgba(238, 242, 255, 0.62);
+    --text-faint: rgba(238, 242, 255, 0.40);
+    --shadow: 0 18px 50px -12px rgba(0, 0, 0, 0.55);
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --bad: #fb7185;
+    --flame: #fb923c;
+    --water: #38bdf8;
+    --radius: 20px;
+    --radius-sm: 14px;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --canvas: #eef1f8;
+      --surface: rgba(255, 255, 255, 0.66);
+      --surface-strong: rgba(255, 255, 255, 0.85);
+      --border: rgba(15, 23, 42, 0.10);
+      --text: #0f172a;
+      --text-dim: rgba(15, 23, 42, 0.62);
+      --text-faint: rgba(15, 23, 42, 0.42);
+      --shadow: 0 18px 50px -16px rgba(31, 41, 84, 0.30);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Avenir Next", Avenir, Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    position: relative;
+    min-height: 100%;
+    background: var(--canvas);
+    overflow-x: hidden;
+  }
+
+  /* Ambient gradient blobs behind the glass */
+  body::before, body::after {
+    content: "";
+    position: fixed;
+    z-index: 0;
+    filter: blur(70px);
+    opacity: 0.55;
+    pointer-events: none;
+    border-radius: 50%;
+  }
+  body::before {
+    width: 460px; height: 460px;
+    top: -160px; left: -120px;
+    background: radial-gradient(circle at 30% 30%, var(--grad-1), transparent 70%);
+  }
+  body::after {
+    width: 520px; height: 520px;
+    bottom: -220px; right: -160px;
+    background: radial-gradient(circle at 70% 70%, var(--grad-3), transparent 70%);
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 18px 16px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .glass {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    box-shadow: var(--shadow);
+  }
+
+  /* ── Hero ─────────────────────────────────────────────── */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding: 22px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, var(--grad-1), var(--grad-2) 55%, var(--grad-3));
+    opacity: 0.16;
+    pointer-events: none;
+  }
+  .hero-badge {
+    flex: 0 0 auto;
+    width: 56px; height: 56px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, var(--grad-1), var(--grad-3));
+    box-shadow: 0 10px 24px -8px var(--grad-2);
+  }
+  .hero-badge svg { width: 30px; height: 30px; color: #fff; }
+  .hero-text { flex: 1 1 auto; min-width: 0; }
+  .hero-text h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .hero-text p {
+    margin: 3px 0 0;
+    font-size: 12.5px;
+    color: var(--text-dim);
+  }
+
+  .pill {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    white-space: nowrap;
+    transition: all 0.3s var(--ease);
+  }
+  .pill .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-faint);
+  }
+  .pill.is-ok    { color: var(--ok); }
+  .pill.is-ok .dot    { background: var(--ok); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); animation: pulse 2s infinite; }
+  .pill.is-bad   { color: var(--bad); }
+  .pill.is-bad .dot   { background: var(--bad); }
+  .pill.is-busy  { color: var(--warn); }
+  .pill.is-busy .dot  { background: var(--warn); animation: blink 1s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,0.6); } 70% { box-shadow: 0 0 0 7px rgba(52,211,153,0); } 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); } }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  /* ── Cards ────────────────────────────────────────────── */
+  .card { padding: 18px 18px 20px; }
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .card-head .ico {
+    width: 34px; height: 34px;
+    border-radius: 11px;
+    display: grid; place-items: center;
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    color: var(--grad-1);
+  }
+  .card-head .ico svg { width: 18px; height: 18px; }
+  .card-head h2 { margin: 0; font-size: 15px; font-weight: 650; }
+  .card-head p { margin: 1px 0 0; font-size: 12px; color: var(--text-dim); }
+
+  /* ── Live dashboard ───────────────────────────────────── */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 12px;
+  }
+  .tile {
+    position: relative;
+    overflow: hidden;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    transition: transform 0.3s var(--ease), border-color 0.3s var(--ease);
+  }
+  .tile:hover { transform: translateY(-2px); }
+  .tile .tile-top {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 11.5px; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+  }
+  .tile .tile-top svg { width: 15px; height: 15px; }
+  .tile .tile-val {
+    margin-top: 9px;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .tile .tile-val small { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+  .tile .tile-sub { margin-top: 5px; font-size: 11.5px; color: var(--text-faint); }
+
+  .tile.state-on  { border-color: rgba(251, 146, 60, 0.45); }
+  .tile.flame.state-on { background: linear-gradient(160deg, rgba(251,146,60,0.22), var(--surface-strong)); }
+  .tile.flame.state-on .tile-top, .tile.flame.state-on .tile-val { color: var(--flame); }
+  .tile.flame.state-on::after {
+    content: ""; position: absolute; right: -20px; bottom: -20px;
+    width: 80px; height: 80px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(251,146,60,0.35), transparent 70%);
+    animation: flicker 1.6s ease-in-out infinite;
+  }
+  @keyframes flicker { 0%,100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }
+  .tile.water.state-on .tile-top, .tile.water.state-on .tile-val { color: var(--water); }
+  .tile.water.state-on { border-color: rgba(56, 189, 248, 0.4); }
+
+  .dash-empty {
+    text-align: center;
+    padding: 22px 10px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .dash-empty svg { width: 34px; height: 34px; color: var(--text-faint); margin-bottom: 8px; }
+
+  .skeleton {
+    border-radius: var(--radius-sm);
+    height: 92px;
+    background: linear-gradient(100deg, var(--surface-strong) 30%, rgba(255,255,255,0.16) 50%, var(--surface-strong) 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.3s infinite;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* ── Form fields ──────────────────────────────────────── */
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field > label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .field .hint { font-size: 11.5px; color: var(--text-faint); margin-top: 5px; }
+
+  .input-wrap { position: relative; display: flex; align-items: center; }
+  .input-wrap > svg.lead {
+    position: absolute; left: 12px; width: 16px; height: 16px; color: var(--text-faint); pointer-events: none;
+  }
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    padding: 11px 12px 11px 38px;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--surface-strong);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    outline: none;
+    transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+    font-family: inherit;
+  }
+  input::placeholder { color: var(--text-faint); }
+  input:focus {
+    border-color: var(--grad-2);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+  }
+  .reveal {
+    position: absolute; right: 8px;
+    background: none; border: none; cursor: pointer;
+    color: var(--text-faint); padding: 6px; border-radius: 8px;
+    display: grid; place-items: center;
+  }
+  .reveal:hover { color: var(--text); background: var(--surface); }
+  .reveal svg { width: 17px; height: 17px; }
+
+  /* ── Toggles ──────────────────────────────────────────── */
+  .toggle-row {
+    display: flex; align-items: center; gap: 13px;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+  }
+  .toggle-row + .toggle-row { margin-top: 4px; }
+  .toggle-row:hover { background: var(--surface-strong); }
+  .toggle-row.on { border-color: var(--border); background: var(--surface-strong); }
+  .toggle-row .t-ico {
+    flex: 0 0 auto;
+    width: 38px; height: 38px; border-radius: 11px;
+    display: grid; place-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    transition: color 0.25s var(--ease), background 0.25s var(--ease);
+  }
+  .toggle-row.on .t-ico { color: #fff; background: linear-gradient(135deg, var(--grad-1), var(--grad-3)); border-color: transparent; }
+  .toggle-row .t-ico svg { width: 19px; height: 19px; }
+  .toggle-row .t-text { flex: 1 1 auto; min-width: 0; }
+  .toggle-row .t-text .t-name { font-size: 13.5px; font-weight: 600; }
+  .toggle-row .t-text .t-desc { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+
+  .switch { position: relative; flex: 0 0 auto; width: 46px; height: 27px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .track {
+    position: absolute; inset: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    transition: background 0.25s var(--ease);
+    cursor: pointer;
+  }
+  .switch .track::before {
+    content: ""; position: absolute;
+    height: 21px; width: 21px; left: 3px; top: 2px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    transition: transform 0.28s var(--ease);
+  }
+  .switch input:checked + .track { background: linear-gradient(135deg, var(--grad-1), var(--grad-3)); border-color: transparent; }
+  .switch input:checked + .track::before { transform: translateX(19px); }
+
+  /* ── Range slider ─────────────────────────────────────── */
+  .range-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .range-head .val { font-size: 20px; font-weight: 700; }
+  .range-head .val small { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 7px; border-radius: 999px;
+    background: var(--surface-strong);
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 21px; height: 21px; border-radius: 50%;
+    background: #fff;
+    border: 3px solid var(--grad-2);
+    cursor: pointer;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+    transition: transform 0.15s var(--ease);
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.12); }
+  input[type="range"]::-moz-range-thumb {
+    width: 21px; height: 21px; border-radius: 50%;
+    background: #fff; border: 3px solid var(--grad-2); cursor: pointer;
+  }
+  .range-ticks { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-faint); margin-top: 7px; }
+
+  /* ── Buttons ──────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+    padding: 12px 18px;
+    font-size: 13.5px; font-weight: 650;
+    border-radius: 13px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--surface-strong);
+    transition: transform 0.15s var(--ease), box-shadow 0.2s var(--ease), opacity 0.2s var(--ease);
+  }
+  .btn svg { width: 17px; height: 17px; }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn[disabled] { opacity: 0.55; cursor: not-allowed; transform: none; }
+  .btn.primary {
+    color: #fff;
+    background: linear-gradient(135deg, var(--grad-1), var(--grad-2) 60%, var(--grad-3));
+    border-color: transparent;
+    box-shadow: 0 12px 26px -10px var(--grad-2);
+  }
+  .btn.block { width: 100%; }
+  .btn .spin { width: 16px; height: 16px; animation: rot 0.8s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  .actions { display: flex; gap: 12px; }
+  .actions .btn { flex: 1; }
+
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 520px) { .row-2 { grid-template-columns: 1fr; } }
+
+  .hidden { display: none !important; }
+
+  /* Fade-in for revealed sections */
+  .reveal-anim { animation: fadeUp 0.45s var(--ease); }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+<!-- ── Icon sprite ─────────────────────────────────────────── -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-thermo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2c1 3 4 4.5 4 8a4 4 0 0 1-8 0c0-1.2.4-2 1-2.8C9.2 9 9 11 11 12c-1-2 .5-4 1-6 .3-1.3 0-3 0-4z"/>
+    <path d="M12 22a6 6 0 0 0 6-6c0-2-1-3.5-2-5 .2 2-1 3-2 3 .5-2-.5-4-2-5.5C9 5 7 8 7 12a5 5 0 0 0 5 10z" opacity=".4"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2.5S5 9 5 14a7 7 0 0 0 14 0c0-5-7-11.5-7-11.5z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="7.5" cy="15.5" r="4"/><path d="M10.5 12.5 21 2m-4 4 3 3m-6 0 3 3"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
+    <circle cx="9" cy="6" r="2.2" fill="var(--canvas)"/><circle cx="15" cy="12" r="2.2" fill="var(--canvas)"/><circle cx="8" cy="18" r="2.2" fill="var(--canvas)"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9.5h14V10"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+  <symbol id="i-bug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="8" y="6" width="8" height="13" rx="4"/><path d="M8 10H4m16 0h-4M8 14H3m18 0h-5M8 18l-3 2m11-2 3 2M9 6 8 3m7 3 1-3"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 3l18 18M10.6 10.7a3 3 0 0 0 4.2 4.2M9.9 5.2A9.5 9.5 0 0 1 12 5c6 0 10 7 10 7a18 18 0 0 1-3.2 3.9M6.1 6.2A18 18 0 0 0 2 12s4 7 10 7a9.3 9.3 0 0 0 3-.5"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7M8 21v-7h8v7"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 2v6m6-6v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v4m0 10v4M3 12h4m10 0h4M5.6 5.6l2.8 2.8m7.2 7.2 2.8 2.8m0-12.8-2.8 2.8M8.4 15.6l-2.8 2.8"/></symbol>
+</svg>
+
+<div class="app">
+
+  <!-- ── Hero ────────────────────────────────────────────── -->
+  <header class="hero glass">
+    <div class="hero-badge"><svg><use href="#i-thermo"/></svg></div>
+    <div class="hero-text">
+      <h1>Bosch Nefit Easy</h1>
+      <p id="hero-sub">Smart thermostat for HomeKit</p>
+    </div>
+    <div class="pill" id="status-pill"><span class="dot"></span><span id="status-text">Not tested</span></div>
+  </header>
+
+  <!-- ── Live dashboard ──────────────────────────────────── -->
+  <section class="card glass">
+    <div class="card-head">
+      <div class="ico"><svg><use href="#i-spark"/></svg></div>
+      <div>
+        <h2>Live Status</h2>
+        <p id="dash-caption">Verify your credentials to see live readings</p>
+      </div>
+    </div>
+    <div id="dash-body">
+      <div class="dash-empty" id="dash-empty">
+        <svg><use href="#i-plug"/></svg>
+        <div>Run <strong>Test Connection</strong> below to pull live data from your thermostat.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Credentials ─────────────────────────────────────── -->
+  <section class="card glass">
+    <div class="card-head">
+      <div class="ico"><svg><use href="#i-key"/></svg></div>
+      <div>
+        <h2>Credentials</h2>
+        <p>Found in the Nefit Easy app under Settings &rsaquo; About</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="name">Display name</label>
+      <div class="input-wrap">
+        <svg class="lead"><use href="#i-home"/></svg>
+        <input type="text" id="name" placeholder="Thermostat" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="serialNumber">Serial number</label>
+      <div class="input-wrap">
+        <svg class="lead"><use href="#i-thermo"/></svg>
+        <input type="text" id="serialNumber" placeholder="e.g. 123456789" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="row-2">
+      <div class="field">
+        <label for="accessKey">Access key</label>
+        <div class="input-wrap">
+          <svg class="lead"><use href="#i-key"/></svg>
+          <input type="text" id="accessKey" placeholder="Access key" autocomplete="off" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="input-wrap">
+          <svg class="lead"><use href="#i-key"/></svg>
+          <input type="password" id="password" placeholder="Password" autocomplete="off" />
+          <button type="button" class="reveal" id="reveal-pw" title="Show / hide"><svg><use href="#i-eye"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn primary block" id="test-btn" style="margin-top:6px">
+      <svg><use href="#i-bolt"/></svg><span>Test Connection</span>
+    </button>
+  </section>
+
+  <!-- ── Features ────────────────────────────────────────── -->
+  <section class="card glass">
+    <div class="card-head">
+      <div class="ico"><svg><use href="#i-sliders"/></svg></div>
+      <div>
+        <h2>Optional Features</h2>
+        <p>Each adds its own tile in the Home app</p>
+      </div>
+    </div>
+    <div id="features-list"></div>
+  </section>
+
+  <!-- ── Advanced ────────────────────────────────────────── -->
+  <section class="card glass">
+    <div class="card-head">
+      <div class="ico"><svg><use href="#i-clock"/></svg></div>
+      <div>
+        <h2>Advanced</h2>
+        <p>Polling cadence &amp; diagnostics</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="range-head">
+        <label style="margin:0">Polling interval</label>
+        <div class="val"><span id="poll-val">60</span><small> sec</small></div>
+      </div>
+      <input type="range" id="pollingInterval" min="10" max="600" step="5" value="60" />
+      <div class="range-ticks"><span>10s · real-time</span><span>300s · passive</span><span>600s</span></div>
+    </div>
+
+    <div class="toggle-row" id="debug-row" style="margin-top:6px">
+      <div class="t-ico"><svg><use href="#i-bug"/></svg></div>
+      <div class="t-text">
+        <div class="t-name">Debug logging</div>
+        <div class="t-desc">Verbose diagnostics — enable only when troubleshooting</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="debug" /><span class="track"></span></label>
+    </div>
+  </section>
+
+  <!-- ── Actions ─────────────────────────────────────────── -->
+  <div class="actions">
+    <button class="btn primary" id="save-btn"><svg><use href="#i-save"/></svg><span>Save Settings</span></button>
+  </div>
+
+</div>
+
+<script>
+(async () => {
+  'use strict';
+
+  const PLATFORM = 'BoschNefitEasy';
+
+  // Feature catalogue — drives the toggle list and dashboard tiles.
+  const FEATURES = [
+    { key: 'hotWater',            icon: 'i-drop',     name: 'Hot Water switch',        desc: 'Turn domestic hot water on/off from HomeKit' },
+    { key: 'manualMode',          icon: 'i-sliders',  name: 'Manual / Schedule switch', desc: 'Toggle manual control vs the weekly schedule' },
+    { key: 'holidayMode',         icon: 'i-calendar', name: 'Holiday indicator',       desc: 'Read-only — shows when Holiday Mode is active' },
+    { key: 'awayMode',            icon: 'i-user',     name: 'Home / Away sensor',      desc: 'Occupancy sensor for automations' },
+    { key: 'outdoorTemperature',  icon: 'i-sun',      name: 'Outdoor temperature',     desc: 'Requires an outdoor sensor on the thermostat' },
+    { key: 'hotWaterTemperature', icon: 'i-drop',     name: 'Hot water temperature',   desc: 'Current hot water tank temperature' },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const refit = () => { try { homebridge.fixScrollHeight(); } catch (e) { /* noop */ } };
+
+  // ── Load existing config (platform plugin → single entry) ──────────────
+  let config;
+  try {
+    const arr = await homebridge.getPluginConfig();
+    config = arr && arr.length ? arr[0] : {};
+  } catch (e) {
+    config = {};
+  }
+  config.platform = PLATFORM;
+  config.name = config.name || 'Thermostat';
+  config.features = config.features || {};
+
+  // ── Render feature toggles ─────────────────────────────────────────────
+  const featuresList = $('features-list');
+  FEATURES.forEach((f) => {
+    const row = document.createElement('div');
+    row.className = 'toggle-row';
+    row.innerHTML =
+      '<div class="t-ico"><svg><use href="#' + f.icon + '"/></svg></div>' +
+      '<div class="t-text"><div class="t-name">' + f.name + '</div><div class="t-desc">' + f.desc + '</div></div>' +
+      '<label class="switch"><input type="checkbox" data-feat="' + f.key + '" /><span class="track"></span></label>';
+    featuresList.appendChild(row);
+  });
+
+  // ── Populate fields from config ────────────────────────────────────────
+  $('name').value = config.name || '';
+  $('serialNumber').value = config.serialNumber || '';
+  $('accessKey').value = config.accessKey || '';
+  $('password').value = config.password || '';
+  $('pollingInterval').value = config.pollingInterval || 60;
+  $('poll-val').textContent = config.pollingInterval || 60;
+  $('debug').checked = config.debug === true;
+
+  document.querySelectorAll('[data-feat]').forEach((el) => {
+    const on = config.features[el.dataset.feat] === true;
+    el.checked = on;
+    el.closest('.toggle-row').classList.toggle('on', on);
+  });
+  $('debug-row').classList.toggle('on', $('debug').checked);
+
+  // ── Two-way binding helpers ────────────────────────────────────────────
+  const sync = () => { try { homebridge.updatePluginConfig([config]); } catch (e) { /* noop */ } };
+
+  const bindText = (id, key) => {
+    $(id).addEventListener('input', (e) => {
+      const v = e.target.value.trim();
+      if (v) { config[key] = v; } else { delete config[key]; }
+      sync();
+    });
+  };
+  bindText('name', 'name');
+  bindText('serialNumber', 'serialNumber');
+  bindText('accessKey', 'accessKey');
+  bindText('password', 'password');
+
+  $('pollingInterval').addEventListener('input', (e) => {
+    const v = parseInt(e.target.value, 10);
+    $('poll-val').textContent = v;
+    config.pollingInterval = v;
+    sync();
+  });
+
+  $('debug').addEventListener('change', (e) => {
+    config.debug = e.target.checked;
+    $('debug-row').classList.toggle('on', e.target.checked);
+    sync();
+  });
+
+  document.querySelectorAll('[data-feat]').forEach((el) => {
+    el.addEventListener('change', (e) => {
+      config.features[el.dataset.feat] = e.target.checked;
+      el.closest('.toggle-row').classList.toggle('on', e.target.checked);
+      sync();
+    });
+  });
+
+  // Password reveal
+  $('reveal-pw').addEventListener('click', () => {
+    const inp = $('password');
+    const showing = inp.type === 'text';
+    inp.type = showing ? 'password' : 'text';
+    $('reveal-pw').querySelector('use').setAttribute('href', showing ? '#i-eye' : '#i-eye-off');
+  });
+
+  // ── Status pill ────────────────────────────────────────────────────────
+  const setStatus = (state, text) => {
+    const pill = $('status-pill');
+    pill.className = 'pill' + (state ? ' is-' + state : '');
+    $('status-text').textContent = text;
+  };
+
+  // ── Dashboard rendering ────────────────────────────────────────────────
+  const fmtTemp = (n) => (n === null || n === undefined ? '—' : Number(n).toFixed(1));
+
+  const tile = (cls, icon, label, valHtml, sub) =>
+    '<div class="tile ' + cls + '">' +
+      '<div class="tile-top"><svg><use href="#' + icon + '"/></svg>' + label + '</div>' +
+      '<div class="tile-val">' + valHtml + '</div>' +
+      (sub ? '<div class="tile-sub">' + sub + '</div>' : '') +
+    '</div>';
+
+  const renderDashboard = (data) => {
+    const s = data.status;
+    const sensors = data.sensors || {};
+    const tiles = [];
+
+    tiles.push(tile('', 'i-thermo', 'Current', fmtTemp(s.currentTemperature) + '<small>°C</small>'));
+    tiles.push(tile('', 'i-target', 'Setpoint', fmtTemp(s.targetTemperature) + '<small>°C</small>'));
+    tiles.push(tile('flame ' + (s.burnerOn ? 'state-on' : ''), 'i-flame', 'Burner', s.burnerOn ? 'On' : 'Off',
+      s.burnerOn ? 'Heating now' : 'Idle'));
+    tiles.push(tile('', 'i-sliders', 'Mode', s.manualMode ? 'Manual' : 'Schedule',
+      s.manualMode ? 'Manual setpoint' : 'Weekly program'));
+
+    if (config.features.hotWater || s.hotWaterOn) {
+      tiles.push(tile('water ' + (s.hotWaterOn ? 'state-on' : ''), 'i-drop', 'Hot Water', s.hotWaterOn ? 'On' : 'Off'));
+    }
+    if (config.features.holidayMode) {
+      tiles.push(tile(s.holidayMode ? 'state-on' : '', 'i-calendar', 'Holiday', s.holidayMode ? 'Active' : 'Off'));
+    }
+    if (config.features.awayMode) {
+      tiles.push(tile('', 'i-user', 'Presence', s.awayMode ? 'Away' : 'Home'));
+    }
+    if (sensors.outdoorTemperature !== undefined && sensors.outdoorTemperature !== null) {
+      tiles.push(tile('', 'i-sun', 'Outdoor', fmtTemp(sensors.outdoorTemperature) + '<small>°C</small>'));
+    }
+    if (sensors.hotWaterTemperature !== undefined && sensors.hotWaterTemperature !== null) {
+      tiles.push(tile('', 'i-drop', 'DHW Temp', fmtTemp(sensors.hotWaterTemperature) + '<small>°C</small>'));
+    }
+
+    $('dash-body').innerHTML = '<div class="dash-grid reveal-anim">' + tiles.join('') + '</div>';
+    $('dash-caption').textContent = 'Live reading · ' + new Date().toLocaleTimeString();
+    refit();
+  };
+
+  const showSkeleton = () => {
+    let cells = '';
+    for (let i = 0; i < 4; i++) { cells += '<div class="skeleton"></div>'; }
+    $('dash-body').innerHTML = '<div class="dash-grid">' + cells + '</div>';
+    refit();
+  };
+
+  // ── Test connection ────────────────────────────────────────────────────
+  const testBtn = $('test-btn');
+  const testConnection = async (silent) => {
+    const payload = {
+      serialNumber: $('serialNumber').value.trim(),
+      accessKey: $('accessKey').value.trim(),
+      password: $('password').value,
+      features: config.features,
+    };
+    if (!payload.serialNumber || !payload.accessKey || !payload.password) {
+      if (!silent) { homebridge.toast.warning('Enter Serial Number, Access Key and Password first.', 'Missing credentials'); }
+      return;
+    }
+
+    testBtn.disabled = true;
+    testBtn.innerHTML = '<svg class="spin"><use href="#i-spark"/></svg><span>Connecting…</span>';
+    setStatus('busy', 'Connecting…');
+    showSkeleton();
+
+    try {
+      const data = await homebridge.request('/test-connection', payload);
+      setStatus('ok', 'Connected');
+      $('hero-sub').textContent = 'Live · ' + fmtTemp(data.status.currentTemperature) + '°C now';
+      renderDashboard(data);
+      if (!silent) { homebridge.toast.success('Live data received from your thermostat.', 'Connected'); }
+    } catch (err) {
+      setStatus('bad', 'Failed');
+      $('dash-body').innerHTML =
+        '<div class="dash-empty"><svg><use href="#i-plug"/></svg><div>' +
+        (err && err.message ? err.message : 'Could not connect.') +
+        '<br><small>Double-check your credentials and that the host has internet access.</small></div></div>';
+      $('dash-caption').textContent = 'Connection failed';
+      if (!silent) { homebridge.toast.error(err && err.message ? err.message : 'Connection failed.', 'Could not connect'); }
+      refit();
+    } finally {
+      testBtn.disabled = false;
+      testBtn.innerHTML = '<svg><use href="#i-bolt"/></svg><span>Test Connection</span>';
+    }
+  };
+  testBtn.addEventListener('click', () => testConnection(false));
+
+  // ── Save ───────────────────────────────────────────────────────────────
+  $('save-btn').addEventListener('click', async () => {
+    if (!config.serialNumber || !config.accessKey || !config.password) {
+      homebridge.toast.warning('Serial Number, Access Key and Password are required.', 'Incomplete');
+      return;
+    }
+    try {
+      await homebridge.updatePluginConfig([config]);
+      await homebridge.savePluginConfig();
+      homebridge.toast.success('Settings saved. Restart Homebridge to apply.', 'Saved');
+    } catch (e) {
+      homebridge.toast.error(e && e.message ? e.message : 'Save failed.', 'Error');
+    }
+  });
+
+  // Keep the in-memory config in sync from the start.
+  sync();
+  refit();
+
+  // Delightful touch: if credentials already exist, pull live data automatically.
+  if (config.serialNumber && config.accessKey && config.password) {
+    testConnection(true);
+  }
+})();
+</script>
+</body>
+</html>
